@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+require 'resque'
+require_relative '../constants.rb'
+require_relative '../tasks/reindex.rb'
+
+puts "Reindexing #{ARGV[0]} into #{ARGV[1]}"
+Resque.redis = "#{RED_HOST}:6379"
+Reindexer.perform( "#{ARGV[0]}", "#{ARGV[1]}" )

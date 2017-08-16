@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+
+echo "Telling workers to stop accepting new jobs. Reindexers may take hours to complete."
+killall -r 'resque' -s USR2

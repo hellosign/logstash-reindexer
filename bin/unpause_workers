@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+
+echo "Telling workers to resume work after pausing."
+killall -r 'resque' -s CONT

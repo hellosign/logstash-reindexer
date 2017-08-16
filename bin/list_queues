@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+
+require 'resque'
+require 'logger'
+require_relative '../tasks/snapper.rb'
+require_relative '../tasks/reindexer.rb'
+require_relative '../constants.rb'
+
+Resque.redis = "#{RED_HOST}:6379"
+redball      = Redis.new( :host => "#{RED_HOST}" )
+queue_sizes  = Resque.queue_sizes
+snap_size    = redball.llen( 'reindex_snaplist' )
+puts "Reindexer           : #{queue_sizes['reindexer']}"
+puts "Snapper             : #{queue_sizes['snapper']}"
+puts "Snapshots Remaining : #{snap_size}"

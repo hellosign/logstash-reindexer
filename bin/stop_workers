@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+
+echo "Informing all workers to finish what they're doing and then stop."
+killall -r 'resque' -s QUIT

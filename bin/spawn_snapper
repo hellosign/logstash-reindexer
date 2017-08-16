@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+echo "Launching a snapper worker"
+PIDFILE=./snapper.pid QUEUE=snapper INTERVAL=30 BACKGROUND=yes rake resque:work

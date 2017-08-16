@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+
+require 'resque'
+require_relative '../tasks/snapper.rb'
+require_relative '../constants.rb'
+
+puts "Fetching a snapshot from #{RED_HOST}."
+redball   = Redis.new( :host => "#{RED_HOST}" )
+snap_size = redball.llen( 'reindex_snaplist' )
+if snap_size > 0 then
+  snap_data = JSON.parse( redball.lpop( 'reindex_snaplist') )
+  puts "Enqueing restoration of #{snap_data['index']} from #{snap_data['snapshot']}"
+  Resque.enqueue( Snapper, "restore", "#{snap_data['snapshot']}", "#{snap_data['index']}" )
+else
+  puts "The reindex_snaplist list has a size of zero, nothing to pop."
+end

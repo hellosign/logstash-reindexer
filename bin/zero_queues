@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+
+require 'resque'
+require_relative '../tasks/snapper.rb'
+require_relative '../tasks/reindexer.rb'
+require_relative 'constants.rb'
+
+puts "Zeroing out the snapper and reindexer queues."
+Resque.redis = "#{RED_HOST}:6379"
+redball      = Redis.new( :host => "#{RED_HOST}" )
+Resque.dequeue( Snapper )
+Resque.dequeue( Reindexer )
+
