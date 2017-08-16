@@ -5,13 +5,13 @@ require 'redis'
 # The Reindexer worker-class. Called by Resque in response to jobs fetched from
 # the `reindexer` queue.
 #
-# The class is entered through the `perform` method.
+# The class is entered through the {Reindexer.perform perform} method.
 #
 # ## Note
-# The `mutate_mapping` method will need localization for each environment
-# doing reindexing. Out of the box all it does is copy events without
-# change. If you are doing an ES 1.x to ES 2.x upgrade, this is likely **not**
-# what you want.
+# The {Reindexer.mutate_mapping mutate_mapping} method will need localization
+# for each environment doing reindexing. Out of the box all it does is copy
+# events without change. If you are doing an ES 1.x to ES 2.x upgrade, this is
+# likely **not** what you want.
 #
 # @author Jamie Riedesel <jamie.riedesel@hellosign.com>
 class Reindexer

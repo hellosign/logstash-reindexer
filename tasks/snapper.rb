@@ -4,7 +4,7 @@ require 'elasticsearch'
 # The Snapper worker-class. Called by Resque in response to jobs submitted
 # to the `snapper` queue.
 #
-# This class is entered through the `perform` method.
+# This class is entered through the {Snapper.perform perform} method.
 #
 # @author Jamie Riedesel <jamie.riedesel@hellosign.com>
 class Snapper
