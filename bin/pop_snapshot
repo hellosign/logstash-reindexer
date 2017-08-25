@@ -8,6 +8,7 @@ puts "Fetching a snapshot from #{RED_HOST}."
 redball   = Redis.new( :host => "#{RED_HOST}" )
 snap_size = redball.llen( 'reindex_snaplist' )
 if snap_size > 0 then
+  Resque.redis = "#{RED_HOST}:6379"
   snap_data = JSON.parse( redball.lpop( 'reindex_snaplist') )
   puts "Enqueing restoration of #{snap_data['index']} from #{snap_data['snapshot']}"
   Resque.enqueue( Snapper, "restore", "#{snap_data['snapshot']}", "#{snap_data['index']}" )
