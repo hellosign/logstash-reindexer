@@ -15,6 +15,16 @@ The tools available in ElasticSearch 5.x and newer make this framework somewhat
 less useful when you get to that level. This is intended to help you _get_
 to that level.
 
+* [Requirements and Cautions](#requirements-and-cautions)
+* [Installing](#installing)
+* [Running](#running)
+* [Pipeline](#pipeline)
+* [Notes on Performance](#notes-on-performance)
+* [Utility Scripts](#utility-scripts)
+* [Operational Runbooks](#operational-runbooks)
+    * [Patching](#patching)
+    * [Moving a Worker](#moving-a-worker)
+
 ## Requirements and Cautions
 * This framework is written in Ruby, and works best with version 2.1.0 or newer.
 * For operational reasons, it's better to perform your reindexing on a separate cluster from your production load.
@@ -31,7 +41,8 @@ to that level.
 1. Clone this repo somewhere you can make changes.
 1. Update `tasks/reindexer.rb`, in the `def self.mutate_mapping` function.
 1. In `reindexer.rb`, write code for any mapping changes you need to make. There are examples to show how it can look.
-1. Update `constants.rb` for your Redis server.
+1. Update `RED_HOST` in `constants.rb` for your Redis server.
+1. Update `SNAP_REGEX` with a [ruby regex](http://rubular.com/r/aaduXGIKcm) that will match the snapshots you want to reindex. This defaults to snapshots named in this style: `logstash-20190801`.
 1. Package your updated repo up and ship it to your reindexing cluster.
 1. Deploy the updated repo to the nodes you plan on running workers from.
 1. If needed, [set up the snapshot repo on your cluster](https://www.elastic.co/guide/en/elasticsearch/reference/1.7/modules-snapshots.html#_repositories).
@@ -57,6 +68,7 @@ on your production cluster.
 1. Localize your `constants.rb` file for each node that will be doing work.
     * The `ES_HOST` constant is the most likely one to need updates.
     * The `RED_HOST` constant should have been updated during the install procedure.
+    * The `SNAP_REGEX` contant should have been updated during the install procedure.
 1. On one node, run `gen_snaplist.rb` to populate your snapshot list.
 1. On one node, run `bin/list_queues` to show the size of the snapshot list.
 1. On one node, run `bin/zero_queues` to purge any `snapper` jobs that built up during testing and profiling.
@@ -85,7 +97,7 @@ Reindexing an index:
 1. The `snapper` worker pops off a take-snapshot job, and performs a snapshot, cleaning up the snapshot index and the one restored in step 1.
 
 
-## Notes on performance
+## Notes on Performance
 Reindexing is incredibly write-heavy. As a result: 
 
 * It will use more write I/O than your production environment. Possibly a *lot* more.
@@ -161,3 +173,35 @@ This will issue a SIG_CONT to your Resque workers. If they were paused with
 ### `bin/zero_queues`
 If you really need to, this will zero the `snapper` and `reindexer` queues. It
 won't touch the `reindex_snaplist` queue.
+
+## Operational Runbooks
+Because this is likely to run a very long time, this will need to be
+integrated into your existing environment's regular maintenance cycle. Here
+are some template runbooks to help you through some common tasks.
+
+### Patching
+This should be valid for both *patch-and-reboot* and *migrate-and-replace*
+methods of patching an infrastructure.
+
+1. Set up your cluster so that the `snapper` worker does not share a node with any `reindexer` workers.
+1. Stop your reindexing workers through `bin/stop_workers`.
+1. Wait for all reindexing workers to stop processing.
+1. Allow the `snapper` worker to do its thing, which is a snapshot then restore of new.
+1. Once the `snapper` worker has no more work, stop it through `bin/stop_workers`
+1. Follow your normal patching runbook.
+1. If needed, reinstall the reindexing framework to the instances that will be running workers.
+1. Start your `reindexer` workers, through `bin/spawn_reindexer`. This should pick up the reindex jobs left behind by the `snapper` before the reboots.
+1. Start your single `snapper` worker.
+
+If you have enough nodes in your cluster that there are some ES nodes that
+do not host a worker, those can be patched normally without stopping reindexing.
+Once those are done, then you can use this runbook. This should reduce the
+reindexing-outage time.
+
+### Moving a worker
+If you need to move a worker from one node to another for some reason.
+
+1. On the source instance, run `bin/stop_workers`.
+1. Wait for any reindexing or snapshot jobs to complete on their own.
+1. Install and localize the reindexing framework on the new instance.
+1. Run the `bin/spawn_snapper` or `bin/spawn_reindexer` command as needed.
