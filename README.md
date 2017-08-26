@@ -24,6 +24,7 @@ to that level.
 * [Operational Runbooks](#operational-runbooks)
     * [Patching](#patching)
     * [Moving a Worker](#moving-a-worker)
+    * [Pause Reindexing](#pause-reindexing)
 
 ## Requirements and Cautions
 * This framework is written in Ruby, and works best with version 2.1.0 or newer.
@@ -31,10 +32,11 @@ to that level.
 * You will need a Redis server to act as a work-queue. This uses [`resque`](https://github.com/resque/resque).
   * If you are already using a redis server for your logstash work, this is safe to reuse.
 * This framework doesn't tolerate ephemeral servers without human intervention.
-  * If you need to patch these, there is a method to pause reindexing operations.
-  * If you need to replace these, you will need to pause reindexing, reinstall this framework on the new server, and restart reindexing.
+  * [If you need to patch these](#patching), there is a method to pause reindexing operations.
+  * [If you need to replace these](#patching), you will need to pause reindexing, reinstall this framework on the new server, and restart reindexing.
 * This isn't set up to handle SSL or authentication to ElasticSearch.
 * Reindexing is incredibly write heavy. Plan for this.
+* Reindexing uses far more CPU than regular operations. Plan for this.
 
 ## Installing
 
@@ -205,3 +207,12 @@ If you need to move a worker from one node to another for some reason.
 1. Wait for any reindexing or snapshot jobs to complete on their own.
 1. Install and localize the reindexing framework on the new instance.
 1. Run the `bin/spawn_snapper` or `bin/spawn_reindexer` command as needed.
+
+### Pause Reindexing
+If you're running this on your production environment for resource-reasons, and
+only want to run reindexing during off hours, there is a way.
+
+1. Create a cronjob to run the `bin/pause_workers` script before prod-load starts.
+1. Create a cronjob to run the `bin/unpause_workers` script after prod-load has slackened.
+
+This will take a lot longer than doing it on its own cluster, but it can be done.
