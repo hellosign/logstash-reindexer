@@ -30,10 +30,10 @@ to that level.
 * This framework is written in Ruby, and works best with version 2.1.0 or newer.
 * For operational reasons, it's better to perform your reindexing on a separate cluster from your production load.
 * You will need a Redis server to act as a work-queue. This uses [`resque`](https://github.com/resque/resque).
-  * If you are already using a redis server for your logstash work, this is safe to reuse.
+    * If you are already using a redis server for your logstash work, this is safe to reuse.
 * This framework doesn't tolerate ephemeral servers without human intervention.
-  * [If you need to patch these](#patching), there is a method to pause reindexing operations.
-  * [If you need to replace these](#patching), you will need to pause reindexing, reinstall this framework on the new server, and restart reindexing.
+    * [If you need to patch these](#patching), there is a method to pause reindexing operations.
+    * [If you need to replace these](#patching), you will need to pause reindexing, reinstall this framework on the new server, and restart reindexing.
 * This isn't set up to handle SSL or authentication to ElasticSearch.
 * Reindexing is incredibly write heavy. Plan for this.
 * Reindexing uses far more CPU than regular operations. Plan for this.
@@ -43,6 +43,7 @@ to that level.
 1. Clone this repo somewhere you can make changes.
 1. Update `tasks/reindexer.rb`, in the `def self.mutate_mapping` function.
 1. In `reindexer.rb`, write code for any mapping changes you need to make. There are examples to show how it can look.
+    * This is very important. Out of the box, it does no transformations and simply copies.
 1. Update `RED_HOST` in `constants.rb` for your Redis server.
 1. Update `SNAP_REGEX` with a [ruby regex](http://rubular.com/r/aaduXGIKcm) that will match the snapshots you want to reindex. This defaults to snapshots named in this style: `logstash-20190801`.
 1. Package your updated repo up and ship it to your reindexing cluster.
