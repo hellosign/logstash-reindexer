@@ -38,7 +38,7 @@ class Reindexer
   # This worker then reindexes the `index` index into an index named `snapshot`.
   #
   # @example
-  #   Reindexer.perform("logstash-2017.09.22", "logstash-2017.09.22-base")
+  #   Reindexer.perform("logstash-20170922", "logstash-2017.09.22")
   #
   # Once reindexing is completed, will submit a job to `snapper` to snapshot
   # the reindexed index.
