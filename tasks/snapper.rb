@@ -70,7 +70,12 @@ class Snapper
   # @param index [String] The index to put into the named snapshot.
   def self.snapshot(snapshot, index)
     esclient = Elasticsearch::Client.new host: ES_HOST
-    rmsmap = esclient.snapshot.delete repository: ES_REPO, snapshot: snapshot
+    begin
+      rmsmap = esclient.snapshot.delete repository: ES_REPO, snapshot: snapshot
+    rescue Elasticsearch::Transport => e
+      puts "Removal of existing snapshot failed for some reason. This isn't fatal."
+      puts e
+    end
     resnap = esclient.snapshot.create repository: ES_REPO,
                                       snapshot: snapshot,
                                       body: { indices: index, ignore_unavailable: true }
