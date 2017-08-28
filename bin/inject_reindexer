@@ -1,0 +1,26 @@
+#!/usr/bin/env ruby
+
+require 'resque'
+require 'elasticsearch'
+require_relative '../tasks/reindexer.rb'
+require_relative '../constants.rb'
+
+source_index = ARGV[0] 
+snapshot     = ARGV[1]
+
+Resque.redis = "#{RED_HOST}:6379"
+esclient = Elasticsearch::Client.new host: ES_HOST, request_timeout: 360
+
+puts "Attempting to inject a reindexing job for #{source_index} into a snapshot named #{snapshot}."
+
+if esclient.indices.exists( :index => source_index )
+  puts "Index identified, injecting a reindex job."
+  if esclient.indices.exists( :index => "#{source_index}-base" )
+    puts "Removing the old reindex target index: #{source_index}-base" )
+    esclient.indices.delete( :index => "#{source_index}-base" )
+  end
+  Resque.enqueue( Reindexer, "#{snapshot}", "#{source_index}" )
+else
+  puts "The specified index, #{source_index} does not seem to exist in the cluster."
+  exit
+end

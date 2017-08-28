@@ -25,6 +25,7 @@ to that level.
     * [Patching](#patching)
     * [Moving a Worker](#moving-a-worker)
     * [Pause Reindexing](#pause-reindexing)
+    * [Restarting from an unsafe stop](#restarting-from-an-unsafe-stop)
 
 ## Requirements and Cautions
 * This framework is written in Ruby, and works best with version 2.1.0 or newer.
@@ -134,6 +135,15 @@ There are still some things you can do to make it go faster:
 There are a few scripts to help you keep track of what is going on, and deal
 with a few edge-cases.
 
+### `bin/inject_reindexer`
+For use if a reindexing job is terminated suddenly, leaving a source index and
+an incomplete target index. This will restart reindexing on that index from the
+start.
+
+```
+bin/inject_reindexer logstash-20190801 logstash-2019.08.01
+```
+
 ### `bin/list_queues`
 This will show how many jobs are queued and snapshots are left in your list.
 
@@ -217,3 +227,15 @@ only want to run reindexing during off hours, there is a way.
 1. Create a cronjob to run the `bin/unpause_workers` script after prod-load has slackened.
 
 This will take a lot longer than doing it on its own cluster, but it can be done.
+
+### Restarting from an unsafe stop
+If you couldn't safely stop reindexing and things terminated suddenly, any
+reindexing going on at the time of the event has left useless indexes. Use
+this procedure to get reindexing back underway.
+
+1. Identify the indexes that are left behind.
+    * These will be pairs of indexes following the `basename` + `basename-base` format
+1. For each pair, run `bin/inject_reindexer #{snapshot_name} #{index_name}`
+    * You will have to know what name these will be snapshot into
+    * Example: `bin/inject_reindexer logstash-20190801 logstash-2019.08.01`
+    * This will remove the old reindexed index and begin indexing on a new one.
