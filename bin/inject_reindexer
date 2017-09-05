@@ -13,11 +13,11 @@ esclient = Elasticsearch::Client.new host: ES_HOST, request_timeout: 360
 
 puts "Attempting to inject a reindexing job for #{source_index} into a snapshot named #{snapshot}."
 
-if esclient.indices.exists( :index => source_index )
+if esclient.indices.exists( :index => "#{source_index}-base" )
   puts "Index identified, injecting a reindex job."
-  if esclient.indices.exists( :index => "#{source_index}-base" )
-    puts "Removing the old reindex target index: #{source_index}-base" )
-    esclient.indices.delete( :index => "#{source_index}-base" )
+  if esclient.indices.exists( :index => "#{source_index}" )
+    puts "Removing the old reindex target index: #{source_index}"
+    esclient.indices.delete( :index => "#{source_index}" )
   end
   Resque.enqueue( Reindexer, "#{snapshot}", "#{source_index}" )
 else
