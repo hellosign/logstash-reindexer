@@ -28,7 +28,8 @@ to that level.
     * [Restarting from an unsafe stop](#restarting-from-an-unsafe-stop)
 
 ## Requirements and Cautions
-* This framework is written in Ruby, and works best with version 2.1.0 or newer.
+* This framework is written in Ruby, and works best with version 2.2.0 or newer.
+    * This requirement comes from the `redis` gem, needed as part of `resque`. If your redis version is not 4.x, you can use an earlier version of the redis gem that works with Ruby 2.1.0.
 * For operational reasons, it's better to perform your reindexing on a separate cluster from your production load.
 * You will need a Redis server to act as a work-queue. This uses [`resque`](https://github.com/resque/resque).
     * If you are already using a redis server for your logstash work, this is safe to reuse.
@@ -42,6 +43,7 @@ to that level.
 ## Installing
 
 1. Clone this repo somewhere you can make changes.
+1. Edit `Gemfile` to use the correct ElasticSearch gems for your ES version.
 1. Update `tasks/reindexer.rb`, in the `def self.mutate_mapping` function.
 1. In `reindexer.rb`, write code for any mapping changes you need to make. There are examples to show how it can look.
     * This is very important. Out of the box, it does no transformations and simply copies.
