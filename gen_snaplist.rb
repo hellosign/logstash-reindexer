@@ -8,7 +8,6 @@ esclient = Elasticsearch::Client.new host: ES_HOST
 raw_snaps  = esclient.snapshot.get repository: ES_REPO, snapshot: '_all'
 red_client = Redis.new(:host => RED_HOST)
 our_snaps  = { }
-our_keykv  = { }
 raw_snaps['snapshots'].each do |snap|
   if snap['snapshot'] =~ SNAP_REGEX and
      snap['state'] == 'SUCCESS' and
@@ -17,7 +16,7 @@ raw_snaps['snapshots'].each do |snap|
   end
 end
 
-# Get our list of snapshots, an reverse it since it will be popped out
+# Get our list of snapshots, and reverse it since it will be popped out
 # stack-style. Should ensure the oldest gets popped first.
 our_snaps.keys.sort.reverse.each do |sn|
   snap_data = JSON.dump( { 'snapshot'=> sn, 'index' => our_snaps[sn][0] } )
