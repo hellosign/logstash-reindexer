@@ -7,6 +7,9 @@ require 'redis'
 #
 # The class is entered through the {Reindexer.perform perform} method.
 #
+# The {Reindexer.test_reindex test_reindex} method is used to test the reindexing
+# logic, without triggering any snapshot operations.
+#
 # ## Note
 # The {Reindexer.mutate_mapping mutate_mapping} method will need localization
 # for each environment doing reindexing. Out of the box all it does is copy
@@ -49,10 +52,30 @@ class Reindexer
   # @param index [String] The index being reindexed.
   def self.perform(snapshot, index)
     Resque::Logging.info("Picked up reindexing job, #{snapshot}")
+    testmode = false
     esclient = Elasticsearch::Client.new host: ES_HOST, request_timeout: 360
-    mutate_mapping(esclient, index)
-    reindex(esclient, snapshot, index)
+    mutate_mapping(esclient, "#{index}-base", index)
+    reindex(esclient, snapshot, index, testmode)
     push_new()
+  end
+
+  # Perform a test reindexing using the mutate functions
+  #
+  # This is intended to be a method used to test your mapping mutations, and
+  # overall reindexing ability. It doesn't trigger any snapshots, it simply
+  # reindexes the source into the target by way of the
+  # {Reindexer.mutate_mapping mutate_mapping} method.
+  #
+  # @example
+  #   Reindexer.test_reindex("logstash-2019.08.02", "logstash-2019.08.02-crosscheck")
+  #
+  # @param source [String] The name of the index to act as source.
+  # @param target [String] The name of the index to reindex into.
+  def self.test_reindex(source, target)
+    testmode = true
+    esclient = Elasticsearch::Client.new host: ES_HOST, request_timeout: 360
+    mutate_mapping(esclient, source, target)
+    reindex(esclient, source, target, testmode)
   end
 
   private
@@ -67,10 +90,11 @@ class Reindexer
   # @note This function should be edited.
   #
   # @param esclient [Elasticsearch::Client] An inited object of type Elasticsearch::Client
-  # @param index [String] The name of the index getting reindexed.
-  def self.mutate_mapping(esclient, index)
-    mapping      = esclient.indices.get_mapping index: "#{index}-base"
-    base_mapping = mapping["#{index}-base"]
+  # @param source [String] The name of the index to pull mappings from.
+  # @param target [String] The name of the index to create with the mutated mapping.
+  def self.mutate_mapping(esclient, source, target)
+    mapping      = esclient.indices.get_mapping index: source
+    base_mapping = mapping["source"]
 
     # This is where you put your schema conversions. Here are some examples:
     #
@@ -85,18 +109,35 @@ class Reindexer
     ## end
     
     # Create the index using the revised mapping.
-    index_create = esclient.indices.create index: index, body: base_mapping
-    Resque::Logging.info("Created target index, #{index}.")
+    index_create = esclient.indices.create index: target, body: base_mapping
+    Resque::Logging.info("Created target index, #{target}.")
   end
 
   # Performs the reindexing function for reindexing.
   #
-  # @param esclient [Elasticsearch::Client] An inited object of type Elasticsearch::Client
-  # @param snapshot [String] The name of the snapshot this index belongs to.
-  # @param index [String] The name of the index that is getting reindexed.
-  def self.reindex(esclient, snapshot, index)
-    Resque::Logging.info("Beginning reindex of #{index}-base to #{index}")
-    rs = esclient.search index: "#{index}-base",
+  # @overload reindex(testmode=true)
+  #   Performs a reindexing in testmode, where no snapshots will be generated.
+  #   @param esclient [Elasticsearch::Client] An inited object of type Elasticsearch::Client
+  #   @param snapshot [String] The source index for reindexing.
+  #   @param index [String] The target index for reindexing.
+  #   @param testmode [Boolean]
+  # @overload reindex(testmode=false)
+  #   Performs a regular reindexing, where snapshots will be generated.
+  #   @param esclient [Elasticsearch::Client] An inited object of type Elasticsearch::Client
+  #   @param snapshot [String] The name of the snapshot this index belongs to.
+  #   @param index [String] The name of the index that is getting reindexed.
+  #   @param testmode [Boolean]
+  def self.reindex(esclient, snapshot, index, testmode=false)
+    if testmode
+      puts("Beginning reindex of #{snapshot} into #{index}")
+      source_index = snapshot
+      target_index = index
+    else
+      Resque::Logging.info("Beginning reindex of #{index}-base to #{index}")
+      source_index = "#{index}-base"
+      target_index = index
+    end
+    rs = esclient.search index: source_index,
                          search_type: 'scan',
                          scroll: '2m',
                          size: ES_BULK_SIZE
@@ -105,13 +146,17 @@ class Reindexer
       rs = esclient.scroll(scroll_id: rs['_scroll_id'], scroll: '2m')
       break if rs['hits']['hits'].empty?
       rs['hits']['hits'].each do |doc|
-        us.push( index: { _index: index, _type: doc['_type'], _id: doc['_id'],
+        us.push( index: { _index: target_index, _type: doc['_type'], _id: doc['_id'],
                            data: doc['_source'] } )
       end
       esclient.bulk body: us
     end
-    Resque::Logging.info("Finished reindexing of #{index}.")
-    Resque.enqueue( Snapper, "snapshot", "#{snapshot}", "#{index}" )
+    if testmode
+      puts("Terminating without snapshot. Go check your work.")
+    else
+      Resque::Logging.info("Finished reindexing of #{index}.")
+      Resque.enqueue( Snapper, "snapshot", "#{snapshot}", "#{index}" )
+    end
   end
 
   # Pops off the next snapshot from the redis-list and submits it for restore.
