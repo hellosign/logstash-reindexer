@@ -94,7 +94,7 @@ class Reindexer
   # @param target [String] The name of the index to create with the mutated mapping.
   def self.mutate_mapping(esclient, source, target)
     mapping      = esclient.indices.get_mapping index: source
-    base_mapping = mapping["source"]
+    base_mapping = mapping["#{source}"]
 
     # This is where you put your schema conversions. Here are some examples:
     #
