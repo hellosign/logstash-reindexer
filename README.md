@@ -143,7 +143,7 @@ an incomplete target index. This will restart reindexing on that index from the
 start.
 
 ```
-bin/inject_reindexer logstash-20190801 logstash-2019.08.01
+bin/inject_reindexer logstash-2019.08.01 logstash-20190801
 ```
 
 ### `bin/list_queues`
