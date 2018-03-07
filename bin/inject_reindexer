@@ -5,8 +5,8 @@ require 'elasticsearch'
 require_relative '../tasks/reindexer.rb'
 require_relative '../constants.rb'
 
-source_index = ARGV[0] 
-snapshot     = ARGV[1]
+snapshot     = ARGV[0] 
+source_index = ARGV[1]
 
 Resque.redis = "#{RED_HOST}:6379"
 esclient = Elasticsearch::Client.new host: ES_HOST, request_timeout: 360

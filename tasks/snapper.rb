@@ -57,7 +57,8 @@ class Snapper
                                                 snapshot: snapshot,
                                                 body: {
                                                   rename_pattern: "^(.*)$",
-                                                  rename_replacement: "$1-base"
+                                                  rename_replacement: "$1-base",
+                                                  include_global_state: false
                                                 }
     snap_wait(esclient, snapshot)
     cluster_wait(esclient)
