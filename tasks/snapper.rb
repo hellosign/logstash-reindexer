@@ -52,15 +52,16 @@ class Snapper
   #
   # @param snapshot [String] The snapshot to restore
   def self.restore(snapshot, index)
-    esclient = Elasticsearch::Client.new host: ES_HOST
-    restore_results = esclient.snapshot.restore repository: ES_REPO,
+    repo      = ES_REPO
+    esclient  = Elasticsearch::Client.new host: ES_HOST
+    restore_results = esclient.snapshot.restore repository: repo,
                                                 snapshot: snapshot,
                                                 body: {
                                                   rename_pattern: "^(.*)$",
                                                   rename_replacement: "$1-base",
                                                   include_global_state: false
                                                 }
-    snap_wait(esclient, snapshot)
+    snap_wait(esclient, snapshot, repo)
     cluster_wait(esclient)
     Resque.enqueue(Reindexer, "#{snapshot}", "#{index}")
   end
@@ -70,17 +71,22 @@ class Snapper
   # @param snapshot [String] The name of the snapshot to take.
   # @param index [String] The index to put into the named snapshot.
   def self.snapshot(snapshot, index)
-    esclient = Elasticsearch::Client.new host: ES_HOST
+    repo      = ES_REPO
+    esclient  = Elasticsearch::Client.new host: ES_HOST
+    fmerge    = esclient.indices.forcemerge index: index
     begin
-      rmsmap = esclient.snapshot.delete repository: ES_REPO, snapshot: snapshot
+      rmsmap = esclient.snapshot.delete repository: repo, snapshot: snapshot
     rescue Elasticsearch::Transport => e
       puts "Removal of existing snapshot failed for some reason. This isn't fatal."
       puts e
     end
-    resnap = esclient.snapshot.create repository: ES_REPO,
+    resnap = esclient.snapshot.create repository: repo,
                                       snapshot: snapshot,
-                                      body: { indices: index, ignore_unavailable: true }
-    snap_wait(esclient, snapshot)
+                                      body: {
+                                        indices: index,
+                                        ignore_unavailable: true,
+                                        max_snapshot_bytes_per_sec: '150mb' }
+    snap_wait(esclient, snapshot, repo)
     esclient.indices.delete index: "#{index}"
     esclient.indices.delete index: "#{index}-base"
   end
@@ -89,9 +95,10 @@ class Snapper
   #
   # @param esclient [Elasticsearch::Client] An inited object of type Elasticsearch::Client
   # @param snapshot [String] The name of the snapshot to track.
-  def self.snap_wait(esclient, snapshot)
+  # @param repo [String] The name of the snapshot repository to poll for status.
+  def self.snap_wait(esclient, snapshot, repo)
     loop do
-      snapstat = esclient.snapshot.status repository: ES_REPO, snapshot: snapshot
+      snapstat = esclient.snapshot.status repository: repo, snapshot: snapshot
       break if snapstat['snapshots'][0]['state'] == 'SUCCESS'
       sleep 5
     end
@@ -99,7 +106,7 @@ class Snapper
 
   # Waits until the cluster is in the 'green' state. It will be in 'red' during
   # initial snapshot restore as the primaries are populated, then 'yellow'
-  # during replica-instatiation. Returns after it is 'green'.
+  # during replica-instantiation. Returns after it is 'green'.
   #
   # @param esclient [Elasticsearch::Client] An inited object of type Elasticsearch::Client
   def self.cluster_wait(esclient)

@@ -11,7 +11,7 @@ source_index = ARGV[1]
 Resque.redis = "#{RED_HOST}:6379"
 esclient = Elasticsearch::Client.new host: ES_HOST, request_timeout: 360
 
-puts "Attempting to inject a reindexing job for #{source_index} into a snapshot named #{snapshot}."
+puts "Attempting to inject a reindexing job to reindex #{source_index} into a snapshot named #{snapshot}."
 
 if esclient.indices.exists( :index => "#{source_index}-base" )
   puts "Index identified, injecting a reindex job."

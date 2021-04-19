@@ -1,19 +1,31 @@
-# LogStash Snapshot Reindexer
-This ruby framework is intended to assist in upgrading an ElasticSearch backend
-for LogStash from ES 1.x to ES 2.x, and perhaps also the ES 2.x to ES 5.x
-upgrade as well. In legacy deployments, you may have the requirement to restore
-ElasticSearch snapshots for up to N years to support regulatory or compliance 
-objectives. When doing an ElasticSearch upgrade, you also need to be sure
-your snapshots will restore on the new ElasticSearch codebase.
+# Logstash Snapshot Reindexer
+This Ruby framework is intended to assist in upgrading an Elasticsearch backend
+for Logstash ES 5.x to 6.x, and perhaps ES 6.x to 7.x as well. In legacy deployments,
+you may have the requirement to restore Elasticsearch snapshots for up to N years
+to support regulatory or compliance objectives. When doing an Elasticsearch upgrade,
+you also need to be sure your snapshots will restore on the new Elasticsearch codebase.
 
 Because of this, chances are good you'll have to reindex all of your snapshots.
 Depending on the nature of the upgrade, you may have to do some schema
-adjustments as you do so to deal with changes in the ElasticSearch features.
+adjustments as you do so to deal with changes in the Elasticsearch features.
 This framework assists in managing this reindexing workflow.
 
-The tools available in ElasticSearch 5.x and newer make this framework somewhat
-less useful when you get to that level. This is intended to help you _get_
+* ES 1.x --> 2.x: All fields named the same must be the same type between mappings.
+* ES 5.x --> 6.x: You only get a single mapping type, so unify your mappings.
+* ES 6.x --> 7.x: You don't get a mapping type anymore.
+
+The Reindexing API available in Elasticsearch 5.x and newer make this framework
+somewhat less gnarly when you get to that level. This is intended to help you _get_
 to that level.
+
+Reindexing is a great time to perform any redactions to your long-term snapshots,
+such as removing privacy or health-related information that otherwise shouldn't
+be there. This is best done as part of the `mutate_mapping` function, which runs
+before reindexing starts. This ensures your reprocessed index has no deleted or
+altered documents.
+
+This will also reshard your indexes to stay below a configured maximum shard-size
+(see constants.rb).
 
 * [Requirements and Cautions](#requirements-and-cautions)
 * [Installing](#installing)
@@ -28,7 +40,7 @@ to that level.
     * [Restarting from an unsafe stop](#restarting-from-an-unsafe-stop)
 
 ## Requirements and Cautions
-* This framework is written in Ruby, and works best with version 2.2.0 or newer.
+* This framework is written in Ruby, and works best with version 2.5.0 or newer.
     * This requirement comes from the `redis` gem, needed as part of `resque`. If your redis version is not 4.x, you can use an earlier version of the redis gem that works with Ruby 2.1.0.
 * For operational reasons, it's better to perform your reindexing on a separate cluster from your production load.
 * You will need a Redis server to act as a work-queue. This uses [`resque`](https://github.com/resque/resque).
@@ -36,36 +48,37 @@ to that level.
 * This framework doesn't tolerate ephemeral servers without human intervention.
     * [If you need to patch these](#patching), there is a method to pause reindexing operations.
     * [If you need to replace these](#patching), you will need to pause reindexing, reinstall this framework on the new server, and restart reindexing.
-* This isn't set up to handle SSL or authentication to ElasticSearch.
+* This isn't set up to handle SSL or authentication to Elasticsearch.
 * Reindexing is incredibly write heavy. Plan for this.
 * Reindexing uses far more CPU than regular operations. Plan for this.
+* This uses the [Reindexing API](https://www.elastic.co/guide/en/elasticsearch/reference/6.8/docs-reindex.html), which uses tasks. The node that receives a Reindexing API call will manage the effort and consume more CPU than nodes just processing the reindexing. Plan to spread out your reindexer workers.
 
 ## Installing
 
 1. Clone this repo somewhere you can make changes.
-1. Edit `Gemfile` to use the correct ElasticSearch gems for your ES version.
+1. Edit `Gemfile` to use the correct Elasticsearch gems for your ES version.
 1. Update `tasks/reindexer.rb`, in the `def self.mutate_mapping` function.
-1. In `reindexer.rb`, write code for any mapping changes you need to make. There are examples to show how it can look.
+1. In the `mutate_mapping` function in `tasks/reindexer.rb`, write code for any mapping changes you need to make. There are examples to show how it can look.
     * This is very important. Out of the box, it does no transformations and simply copies.
 1. Update `RED_HOST` in `constants.rb` for your Redis server.
 1. Update `SNAP_REGEX` with a [ruby regex](http://rubular.com/r/aaduXGIKcm) that will match the snapshots you want to reindex. This defaults to snapshots named in this style: `logstash-20190801`.
 1. Package your updated repo up and ship it to your reindexing cluster.
 1. Deploy the updated repo to the nodes you plan on running workers from.
-1. If needed, [set up the snapshot repo on your cluster](https://www.elastic.co/guide/en/elasticsearch/reference/1.7/modules-snapshots.html#_repositories).
+1. If needed, [set up the snapshot repo on your cluster](https://www.elastic.co/guide/en/elasticsearch/reference/6.8/modules-snapshots.html#_repositories).
     * Running `http://localhost:9200/_snapshot?pretty` on your prod cluster will give you hints as to what you want in this step.
-1. [By hand, restore an index from your archive](https://www.elastic.co/guide/en/elasticsearch/reference/1.7/modules-snapshots.html#_restore).
-1. On one server, update `constants.rb` for the `ES_HOST` value to describe the ES host the scripts will be talking to.
+1. [By hand, restore an index from your archive](https://www.elastic.co/guide/en/elasticsearch/reference/6.8/modules-snapshots.html#_restore).
+1. On one server, update `constants.rb` for the `ES_HOST` value to describe the ES host the framework will be talking to.
 1. On one server, Run `test_reindex` on the index.
     * `bin/test_reindex logstash-2014.10.22 logstash-reindex` to reindex the `logstash-2014.10.22` index into `logstash-reindex`
-    * The intent is to test your reindexing code, make sure it looks right, and allow you to profile performance.
-        * `ES_BULK_SIZE` in `constants.rb` is something you should look at in this step.
+    * The intent is to test your reindexing code, make sure it looks right, ensure your redactions are being performed correctly (if any) and allow you to profile performance.
+1. Update `SHARD_TARGET` in `constants.rb` to set the maximum shard-size for your indexes, which defaults to 60GB. Keep in mind that in most environments, your reprocessed index will be significantly smaller than it started. The math behind shard-selection is based on the _source index size_, which will be larger than your _target index size_. Benchmarking will let you know what a safe value is for your particular data.
 1. Once you are confident you have everything how you need it, zero the queues through `bin/zero_queues`
 1. Go to the `Running` procedure to start the reindexing.
 
 ## Running
 There are two workers here. The `snapper` worker that performs snapshot
 operations, and `reindexer` workers that do reindexing. Due to limits with
-ElasticSearch, _one and only one `snapper` should run_, as only one snapshot
+Elasticsearch, _one and only one `snapper` should run_, as only one snapshot
 operation at a time may be performed on a cluster. If you're running this
 framework in your production environment, your existing snapshot infrastructure
 will likely conflict with this one. Yet another reason to not try to run this
@@ -130,7 +143,7 @@ There are still some things you can do to make it go faster:
 * If not, ensure you have enough data-nodes that no more than 2 primary-shards exist for an index on a node.
     * For the default setting of 5 shards with 1 replica, this means 5 data-nodes.
 * Don't run it on your production environment. The competing I/O will slow it down, and slow prod down.
-* Run the `reindexer` workers on client-only nodes, to ensure the ruby-script doesn't steal CPU from data-node reindexing.
+* The node the `reindexer` workers hit to submit Reindexing API calls will consume more CPU than other nodes, as it has to coordinate the reindexing effort (in the ES2 version of this framework, the reindexing worker itself handled this task in a long-running Ruby process).
 * This will run long enough it's worth your time to attempt to profile where your bottlenecks are and resolve them.
 
 ## Utility Scripts
@@ -140,10 +153,10 @@ with a few edge-cases.
 ### `bin/inject_reindexer`
 For use if a reindexing job is terminated suddenly, leaving a source index and
 an incomplete target index. This will restart reindexing on that index from the
-start.
+start, and perform the appropriate snapshot work.
 
 ```
-bin/inject_reindexer logstash-2019.08.01 logstash-20190801
+bin/inject_reindexer logstash-20190801 logstash-2019.08.01
 ```
 
 ### `bin/list_queues`
